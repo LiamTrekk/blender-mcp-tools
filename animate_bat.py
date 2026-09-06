@@ -23,6 +23,41 @@ def clamp(v, a=0.0, b=1.0):
     return a if v < a else b if v > b else v
 
 
+def vertex_weights(x, y, z):
+    """Bone influences for a vertex at (x, y, z), normalised to sum to 1.0.
+
+    Deliberately pure arithmetic with no bpy dependency: the caller cannot see
+    the viewport, so weighting must be reproducible and testable rather than
+    eyeballed. Blender's heat-map auto-weights were unpredictable on this mesh
+    (and hung the GUI), so influence is derived from position instead.
+
+    Kept importable without Blender so tests/test_weights.py can verify the
+    determinism and normalisation this script depends on.
+    """
+    wr = clamp((x - 0.16) / 0.32)
+    wl = clamp((-x - 0.16) / 0.32)
+    tip_r = clamp((x - 0.50) / 0.28)
+    tip_l = clamp((-x - 0.50) / 0.28)
+    head_w = (
+        clamp((-y - 0.00) / 0.14)
+        * clamp(1.0 - abs(x) / 0.24)
+        * clamp((z + 0.05) / 0.20)
+    )
+    body = clamp(1.0 - abs(x) / 0.34) * (1.0 - wr) * (1.0 - wl)
+    spine_w = body * (1.0 - head_w * 0.7)
+    weights = {
+        "wing_R_tip": tip_r,
+        "wing_L_tip": tip_l,
+        "wing_R": wr * (1.0 - tip_r),
+        "wing_L": wl * (1.0 - tip_l),
+        "head": head_w * (1.0 - wr) * (1.0 - wl),
+        "spine": spine_w,
+        "root": 0.08 * (1.0 - wr) * (1.0 - wl),
+    }
+    total = sum(weights.values()) or 1.0
+    return {name: w / total for name, w in weights.items()}
+
+
 def main():
     scene = bpy.context.scene
     bat = bpy.data.objects.get("PhotorealBat")
@@ -80,29 +115,7 @@ def main():
     mesh = bat.data
     for v in mesh.vertices:
         x, y, z = v.co
-        wr = clamp((x - 0.16) / 0.32)
-        wl = clamp((-x - 0.16) / 0.32)
-        tip_r = clamp((x - 0.50) / 0.28)
-        tip_l = clamp((-x - 0.50) / 0.28)
-        head_w = (
-            clamp((-y - 0.00) / 0.14)
-            * clamp(1.0 - abs(x) / 0.24)
-            * clamp((z + 0.05) / 0.20)
-        )
-        body = clamp(1.0 - abs(x) / 0.34) * (1.0 - wr) * (1.0 - wl)
-        spine_w = body * (1.0 - head_w * 0.7)
-        weights = {
-            "wing_R_tip": tip_r,
-            "wing_L_tip": tip_l,
-            "wing_R": wr * (1.0 - tip_r),
-            "wing_L": wl * (1.0 - tip_l),
-            "head": head_w * (1.0 - wr) * (1.0 - wl),
-            "spine": spine_w,
-            "root": 0.08 * (1.0 - wr) * (1.0 - wl),
-        }
-        total = sum(weights.values()) or 1.0
-        for name, w in weights.items():
-            nw = w / total
+        for name, nw in vertex_weights(x, y, z).items():
             if nw > 0.02:
                 groups[name].add([v.index], nw, "REPLACE")
 

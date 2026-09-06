@@ -80,6 +80,24 @@ Generalising from the above — things worth doing in any headless Blender autom
 - **Parameterise output paths.** Hardcoded absolute paths are the first thing that breaks when
   a script leaves the machine it was written on.
 
+## Tests
+
+The claim that the weighting is deterministic is the reason it exists, so it is
+tested rather than asserted:
+
+```sh
+python3 -m pytest tests/ -v
+```
+
+`vertex_weights()` is deliberately pure arithmetic with no `bpy` dependency, so
+the tests run **without Blender installed** — which is itself the point. They check
+the normalisation invariant (influences sum to 1.0), left/right symmetry under
+mirroring, that no bone is ever dropped, that no influence is negative, and that
+repeated calls with identical input return identical output.
+
+That last one matters most: the caller cannot inspect the viewport, so a run that
+varied between invocations would go unnoticed until the render came out wrong.
+
 ## Requirements
 
 Blender 3.x or later with its bundled Python. No third-party packages.
